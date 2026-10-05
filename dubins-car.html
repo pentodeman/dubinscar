@@ -1,0 +1,694 @@
+<title>Dubins Shortest Paths</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#E8ECF0; --sheet:#F9FAFB; --ink:#16202B; --muted:#586573; --rule:#CBD3DC; --grid:#E1E7ED; --grid-major:#CCD5DE;
+  --accent:#1F4FA8; --accent-ink:#FFFFFF; --start:#1C8A4C; --goal:#C9302A; --car:#2A55B8; --beam:#F2C318; --circle:#8A96A3;
+  --LRL:#8A5427; --RLR:#1D7432; --LSL:#DB4F96; --LSR:#2A5FD6; --RSL:#E57A12; --RSR:#A88700;
+  --region-alpha:0.20; --shadow:0 1px 2px rgba(22,32,43,.06),0 6px 24px rgba(22,32,43,.06);
+  --f-display:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#0E1318; --sheet:#151C23; --ink:#E3E9EF; --muted:#94A2AF; --rule:#2A3541; --grid:#1C252E; --grid-major:#29343F;
+    --accent:#86A9F2; --accent-ink:#0E1318; --start:#46C07B; --goal:#F06A5E; --car:#6F97F0; --beam:#F5D24A; --circle:#6B7886;
+    --LRL:#C58C57; --RLR:#4CBB6B; --LSL:#F27DBA; --LSR:#6E9BF5; --RSL:#F59C47; --RSR:#D9B92E;
+    --region-alpha:0.26; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 24px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#0E1318; --sheet:#151C23; --ink:#E3E9EF; --muted:#94A2AF; --rule:#2A3541; --grid:#1C252E; --grid-major:#29343F;
+  --accent:#86A9F2; --accent-ink:#0E1318; --start:#46C07B; --goal:#F06A5E; --car:#6F97F0; --beam:#F5D24A; --circle:#6B7886;
+  --LRL:#C58C57; --RLR:#4CBB6B; --LSL:#F27DBA; --LSR:#6E9BF5; --RSL:#F59C47; --RSR:#D9B92E;
+  --region-alpha:0.26; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 24px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+.leftcol{display:flex;flex-direction:column;gap:22px;min-width:0}
+body{background:var(--ground);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
+.wrap{max-width:1240px;margin:0 auto;padding-inline:20px;padding-block:28px 56px;display:flex;flex-direction:column;gap:22px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 28px}
+h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,4vw,40px);line-height:1.05;margin:0;letter-spacing:-.01em;text-wrap:balance}
+h1 .eq{font-family:var(--f-mono);font-weight:400;font-size:.42em;color:var(--muted);letter-spacing:0;display:block;margin-top:8px}
+header p{margin:0;max-width:52ch;color:var(--muted)}
+.eyebrow{font-family:var(--f-display);font-weight:600;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:22px;align-items:start}
+@media (max-width:920px){.main{grid-template-columns:minmax(0,1fr)}}
+.sheet{background:var(--sheet);border:1px solid var(--rule);border-radius:6px;box-shadow:var(--shadow)}
+.plot{padding:10px;display:flex;flex-direction:column;gap:8px}
+.plot canvas{display:block;width:100%;height:auto;aspect-ratio:3/2;touch-action:none;border-radius:3px;max-width:100%}
+.hint{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:13px;color:var(--muted);padding:0 4px}
+.hint b{color:var(--ink);font-weight:600}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:0}
+.panel{display:flex;flex-direction:column;gap:0}
+.panel section{padding:16px 18px;border-top:1px solid var(--rule);display:flex;flex-direction:column;gap:10px}
+.panel section:first-child{border-top:0}
+.readout .word{font-family:var(--f-display);font-weight:700;font-size:54px;line-height:.95;letter-spacing:.04em}
+.readout .row{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.stats{display:grid;grid-template-columns:auto 1fr;gap:2px 14px;font-size:13.5px}
+.stats dt{color:var(--muted)} .stats dd{margin:0;text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.ctl{display:flex;flex-direction:column;gap:4px}
+.ctl-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.ctl label,.lbl{font-family:var(--f-display);font-weight:600;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.val{font-family:var(--f-mono);font-size:13px;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent);margin:2px 0}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button,select{font:inherit;font-size:14px;border-radius:4px;border:1px solid var(--rule);background:var(--sheet);color:var(--ink);padding:6px 12px;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600;min-width:84px}
+button:hover{border-color:var(--muted)} button.primary:hover{filter:brightness(1.08)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.poses{display:grid;grid-template-columns:auto repeat(3,minmax(0,1fr));gap:6px 8px;align-items:center}
+.poses .lbl{font-size:12px}
+.poses input{width:100%;font-family:var(--f-mono);font-size:13px;padding:5px 6px;border:1px solid var(--rule);border-radius:4px;background:var(--ground);color:var(--ink);font-variant-numeric:tabular-nums}
+.poses .who{font-family:var(--f-display);font-weight:600;font-size:14px;display:flex;align-items:center}
+.toggles{display:flex;flex-direction:column;gap:6px;font-size:14px}
+.toggles label{display:flex;gap:8px;align-items:center;cursor:pointer}
+input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px;margin:0}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{font-family:var(--f-display);font-weight:600;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:4px 6px;border-bottom:1px solid var(--rule)}
+td{padding:6px 6px;border-bottom:1px solid var(--grid);vertical-align:middle}
+td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+td.w{font-family:var(--f-display);font-weight:700;font-size:16px;letter-spacing:.05em;white-space:nowrap}
+td.w .sw{display:inline-block;width:18px;height:4px;border-radius:2px;margin-right:8px;vertical-align:4px}
+td.note{color:var(--muted);font-size:12.5px;line-height:1.3}
+tr.best td{background:color-mix(in srgb,var(--accent) 9%,transparent)}
+tr.best td.num{font-weight:500}
+tr.off td.w,tr.off td.num{opacity:.45}
+.pill{display:inline-block;font-family:var(--f-display);font-weight:600;font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:1px 7px;border-radius:10px;background:var(--accent);color:var(--accent-ink)}
+.profile{padding:14px 16px 10px;display:flex;flex-direction:column;gap:6px}
+.profile canvas{display:block;width:100%;height:210px;max-width:100%}
+.profile .top{display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px 16px;align-items:baseline}
+.profile .top span{font-size:13px;color:var(--muted)}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:22px}
+.notes .sheet{padding:18px 22px}
+.notes h2{font-family:var(--f-display);font-weight:700;font-size:21px;margin:0 0 8px;letter-spacing:.005em}
+.notes p,.notes li{max-width:66ch}
+.notes p{margin:0 0 10px}
+.math{font-family:var(--f-mono);font-size:14px;background:var(--ground);border:1px solid var(--rule);border-radius:4px;padding:10px 12px;margin:0 0 12px;line-height:1.7;overflow-x:auto;white-space:nowrap}
+.legend{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 12px;margin:4px 0 12px;font-size:13.5px}
+.legend span{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.legend i{display:inline-block;width:20px;height:4px;border-radius:2px}
+.notes ul,.notes ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.refs li{font-size:13.5px;color:var(--muted)} .refs li em{color:var(--ink);font-style:italic}
+a{color:var(--accent)}
+sub{font-size:.72em}
+@media (max-width:520px){.wrap{padding-inline:16px}.readout .word{font-size:44px}.legend{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<div class="wrap">
+  <header>
+    <div>
+      <p class="eyebrow">Bounded-curvature shortest path</p>
+      <h1>Dubins Car Shortest Path<span class="eq">ẋ = cos θ &nbsp; ẏ = sin θ &nbsp; θ̇ = u,&nbsp; |u| ≤ 1/r<sub>min</sub></span></h1>
+    </div>
+    <p>The car starts at the green pose and must reach the red pose driving forward only. All six Dubins words are solved exactly; the thick curve is the shortest one.</p>
+  </header>
+
+  <div class="main">
+    <div class="leftcol">
+    <div class="sheet plot">
+      <canvas id="plot" aria-label="Plot of the start pose, goal pose and the six Dubins candidate paths"></canvas>
+      <div class="hint">
+        <span><b>Drag the red car</b> to move the goal</span>
+        <span><b>Drag the dot</b> ahead of a car to turn it</span>
+        <span><b>Drag the green car</b> to move the start</span>
+      </div>
+    </div>
+  <div class="sheet profile">
+      <div class="top">
+        <p class="eyebrow" id="profileTitle">Control input along the path</p>
+        <span>Steering u(s) takes only the values +1/r<sub>min</sub>, 0, −1/r<sub>min</sub>; heading θ(s) is its integral.</span>
+      </div>
+      <canvas id="prof" aria-label="Steering input and heading plotted against distance travelled"></canvas>
+    </div>
+
+    </div>
+
+    <div class="sheet panel">
+      <section class="readout" aria-live="polite">
+        <p class="eyebrow">Shortest path</p>
+        <div class="row">
+          <div class="word" id="bestWord">LSR</div>
+          <span class="pill" id="followPill" hidden>car on other word</span>
+        </div>
+        <dl class="stats">
+          <dt>Path length</dt><dd id="bestLen">–</dd>
+          <dt>Straight-line distance</dt><dd id="dist">–</dd>
+          <dt>Length ÷ distance</dt><dd id="ratio">–</dd>
+        </dl>
+      </section>
+
+      <section>
+        <div class="ctl">
+          <div class="ctl-head"><label for="progress">Progress</label><span class="val" id="progressVal">0.25</span></div>
+          <input type="range" id="progress" min="0" max="1" step="0.001" value="0.25">
+        </div>
+        <div class="btnrow">
+          <button class="primary" id="play" type="button">Play</button>
+          <select id="speed" aria-label="Driving speed">
+            <option value="2">2 units/s</option>
+            <option value="5" selected>5 units/s</option>
+            <option value="10">10 units/s</option>
+          </select>
+          <select id="follow" aria-label="Path the car drives">
+            <option value="auto" selected>Drive shortest</option>
+            <option>LSL</option><option>LSR</option><option>RSL</option>
+            <option>RSR</option><option>RLR</option><option>LRL</option>
+          </select>
+        </div>
+        <div class="ctl">
+          <div class="ctl-head"><label for="rmin">Min turning radius r<sub>min</sub></label><span class="val" id="rminVal">3.00</span></div>
+          <input type="range" id="rmin" min="0" max="5" step="0.01" value="3">
+        </div>
+      </section>
+
+      <section>
+        <div class="poses">
+          <span></span><span class="lbl">x</span><span class="lbl">y</span><span class="lbl">θ (deg)</span>
+          <span class="who"><span class="dot" style="background:var(--start)"></span>Start</span>
+          <input id="sx" type="number" step="0.1" aria-label="Start x"><input id="sy" type="number" step="0.1" aria-label="Start y"><input id="sth" type="number" step="1" aria-label="Start heading in degrees">
+          <span class="who"><span class="dot" style="background:var(--goal)"></span>Goal</span>
+          <input id="gx" type="number" step="0.1" aria-label="Goal x"><input id="gy" type="number" step="0.1" aria-label="Goal y"><input id="gth" type="number" step="1" aria-label="Goal heading in degrees">
+        </div>
+        <div class="btnrow">
+          <button type="button" id="reset">Reset to demo defaults</button>
+          <button type="button" id="random">Random goal</button>
+        </div>
+      </section>
+
+      <section class="toggles">
+        <label><input type="checkbox" id="showCircles" checked> Turning circles at start and goal</label>
+        <label><input type="checkbox" id="showRegions"> Regions where each word is optimal</label>
+      </section>
+
+      <section>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th scope="col">Show</th><th scope="col">Word</th><th scope="col" style="text-align:right">Length</th><th scope="col">Condition</th></tr></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="sheet">
+      <h2>The model</h2>
+      <p>The car's state is the position (x, y) of the midpoint of its rear axle and its heading θ. The rear wheels roll without slipping, so the car cannot move sideways. It drives forward at unit speed and its steering is bounded, which sets a minimum turning radius r<sub>min</sub>.</p>
+      <div class="math">ẋ = cos θ,&nbsp;&nbsp; ẏ = sin θ,&nbsp;&nbsp; θ̇ = u,&nbsp;&nbsp; u ∈ [−1/r<sub>min</sub>, 1/r<sub>min</sub>]</div>
+      <p>Dubins (1957) proved the shortest path has at most three segments, each a full-lock left turn <b>L</b> (u = 1/r<sub>min</sub>), a straight <b>S</b> (u = 0), or a full-lock right turn <b>R</b> (u = −1/r<sub>min</sub>). Only six words can be optimal:</p>
+      <div class="legend">
+        <span><i style="background:var(--LSL)"></i>LSL pink</span>
+        <span><i style="background:var(--LSR)"></i>LSR blue</span>
+        <span><i style="background:var(--RSL)"></i>RSL orange</span>
+        <span><i style="background:var(--RSR)"></i>RSR dark yellow</span>
+        <span><i style="background:var(--RLR)"></i>RLR dark green</span>
+        <span><i style="background:var(--LRL)"></i>LRL brown</span>
+      </div>
+      <p>LSR and RSL exist only when the two turning-circle centers they join are more than 2r<sub>min</sub> apart. LRL and RLR exist only when those centers are less than 4r<sub>min</sub> apart. The solver computes every word that exists and keeps the shortest. With r<sub>min</sub> = 0 the car can turn in place, and the shortest path is the straight segment.</p>
+    </div>
+    <div class="sheet">
+      <h2>How this version works</h2>
+      <ul>
+        <li>Each word is solved in closed form in a frame where the start is at the origin and the goal lies on the x-axis, scaled by r<sub>min</sub> (LaValle, ch. 15.3). Every candidate is checked by integrating the three segments and landing on the goal pose.</li>
+        <li>Both the start and the goal can be moved and turned; the original Demonstration fixes the start at the origin.</li>
+        <li>The region overlay colors each point of the plane by the word that would be shortest if the goal were placed there, holding the goal heading and r<sub>min</sub> fixed. This is the synthesis described by Bui et al. [4].</li>
+        <li>The profile below the plot shows the bang-off-bang steering signal u(s) and the heading θ(s) for the path the car is driving.</li>
+        <li>If the car may also reverse, the optimal-path family grows to 46 words; that is the Reeds–Shepp car [2].</li>
+      </ul>
+      <h2 style="margin-top:16px">References</h2>
+      <ol class="refs">
+        <li>L. E. Dubins, “<em>On Curves of Minimal Length with a Constraint on Average Curvature, and with Prescribed Initial and Terminal Positions and Tangents</em>,” American Journal of Mathematics, 79(3), 1957, pp. 497–516.</li>
+        <li>J. A. Reeds and L. A. Shepp, “<em>Optimal Paths for a Car That Goes both Forwards and Backwards</em>,” Pacific Journal of Mathematics, 145(2), 1990, pp. 367–393.</li>
+        <li>S. LaValle, <em>Planning Algorithms</em>, Cambridge University Press, 2006. <a href="http://planning.cs.uiuc.edu/node821.html" target="_blank" rel="noopener">planning.cs.uiuc.edu/node821.html</a></li>
+        <li>X.-N. Bui, P. Souères, J.-D. Boissonnat and J.-P. Laumond, “<em>The Shortest Path Synthesis for Non-holonomic Robots Moving Forwards</em>,” Research Report RR-2153, INRIA, France, 1994.</li>
+      </ol>
+    </div>
+  </div>
+</div>
+<script>
+// Dubins shortest-path solver (forward-only car, min turning radius r)
+const TAU = Math.PI * 2;
+const mod2pi = a => ((a % TAU) + TAU) % TAU;
+const WORDS = ['LSL','LSR','RSL','RSR','RLR','LRL'];
+
+// Returns normalized segment params [t,p,q] (angles for arcs, length/r for straight) or null
+function wordParams(word, a, b, d) {
+  const sa = Math.sin(a), sb = Math.sin(b), ca = Math.cos(a), cb = Math.cos(b), cab = Math.cos(a - b);
+  let p2, tmp, t, p, q;
+  switch (word) {
+    case 'LSL':
+      p2 = 2 + d*d - 2*cab + 2*d*(sa - sb); if (p2 < 0) return null;
+      tmp = Math.atan2(cb - ca, d + sa - sb);
+      return [mod2pi(-a + tmp), Math.sqrt(p2), mod2pi(b - tmp)];
+    case 'RSR':
+      p2 = 2 + d*d - 2*cab + 2*d*(sb - sa); if (p2 < 0) return null;
+      tmp = Math.atan2(ca - cb, d - sa + sb);
+      return [mod2pi(a - tmp), Math.sqrt(p2), mod2pi(-b + tmp)];
+    case 'LSR':
+      p2 = -2 + d*d + 2*cab + 2*d*(sa + sb); if (p2 < 0) return null;
+      p = Math.sqrt(p2);
+      tmp = Math.atan2(-ca - cb, d + sa + sb) - Math.atan2(-2, p);
+      return [mod2pi(-a + tmp), p, mod2pi(-b + tmp)];
+    case 'RSL':
+      p2 = -2 + d*d + 2*cab - 2*d*(sa + sb); if (p2 < 0) return null;
+      p = Math.sqrt(p2);
+      tmp = Math.atan2(ca + cb, d - sa - sb) - Math.atan2(2, p);
+      return [mod2pi(a - tmp), p, mod2pi(b - tmp)];
+    case 'RLR':
+      tmp = (6 - d*d + 2*cab + 2*d*(sa - sb)) / 8; if (Math.abs(tmp) > 1) return null;
+      p = mod2pi(TAU - Math.acos(tmp));
+      t = mod2pi(a - Math.atan2(ca - cb, d - sa + sb) + p/2);
+      return [t, p, mod2pi(a - b - t + p)];
+    case 'LRL':
+      tmp = (6 - d*d + 2*cab + 2*d*(sb - sa)) / 8; if (Math.abs(tmp) > 1) return null;
+      p = mod2pi(TAU - Math.acos(tmp));
+      t = mod2pi(-a - Math.atan2(ca - cb, d + sa - sb) + p/2);
+      return [t, p, mod2pi(b - a - t + p)];
+  }
+}
+
+// start/goal: {x,y,th}; r>0
+function solveAll(s, g, r) {
+  const dx = g.x - s.x, dy = g.y - s.y, D = Math.hypot(dx, dy);
+  const d = D / r, phi = Math.atan2(dy, dx);
+  const a = mod2pi(s.th - phi), b = mod2pi(g.th - phi);
+  return WORDS.map(w => {
+    const prm = wordParams(w, a, b, d);
+    if (!prm) return { word: w, feasible: false, length: Infinity };
+    const segs = prm.map((v, i) => ({ type: w[i], len: v * r }));
+    return { word: w, feasible: true, segs, length: segs.reduce((acc, z) => acc + z.len, 0) };
+  });
+}
+
+// pose after travelling distance s along path segments
+function poseAt(start, segs, r, dist) {
+  let x = start.x, y = start.y, th = start.th, left = dist;
+  for (const sg of segs) {
+    const l = Math.min(sg.len, Math.max(left, 0));
+    if (sg.type === 'S') { x += l*Math.cos(th); y += l*Math.sin(th); }
+    else if (sg.type === 'L') { const n = th + l/r; x += r*(Math.sin(n)-Math.sin(th)); y += r*(Math.cos(th)-Math.cos(n)); th = n; }
+    else { const n = th - l/r; x += r*(Math.sin(th)-Math.sin(n)); y += r*(Math.cos(n)-Math.cos(th)); th = n; }
+    left -= sg.len;
+    if (left <= 0) return { x, y, th, seg: sg.type };
+  }
+  return { x, y, th, seg: segs.length ? segs[segs.length-1].type : 'S' };
+}
+if (typeof module !== 'undefined') module.exports = { solveAll, poseAt, WORDS, mod2pi };
+(function(){
+const DEG = 180/Math.PI;
+const VIEW = {x0:-15, x1:15, y0:-10, y1:10};
+const LIMIT = {x:14, y:9};
+const WHEELBASE = 1.4;
+const DEFAULTS = { start:{x:0,y:0,th:0}, goal:{x:2,y:2,th:-Math.PI/4}, r:3, progress:0.25 };
+
+const st = {
+  start:{...DEFAULTS.start}, goal:{...DEFAULTS.goal}, r:DEFAULTS.r, progress:DEFAULTS.progress,
+  playing:false, speed:5, follow:'auto', showCircles:true, showRegions:false,
+  visible:Object.fromEntries(WORDS.map(w=>[w,true])),
+  sol:null, best:null, drag:null, hover:null
+};
+const $ = id => document.getElementById(id);
+const plot = $('plot'), pctx = plot.getContext('2d');
+const prof = $('prof'), fctx = prof.getContext('2d');
+
+// ---------- theme tokens ----------
+let C = {};
+function readTokens(){
+  const cs = getComputedStyle(document.documentElement);
+  const names = ['sheet','ink','muted','rule','grid','grid-major','accent','start','goal','car','beam','circle','LRL','RLR','LSL','LSR','RSL','RSR','region-alpha'];
+  for (const n of names) C[n] = cs.getPropertyValue('--'+n).trim();
+  C.alpha = parseFloat(C['region-alpha']) || 0.2;
+  regionKey = ''; // colors changed
+}
+const hexRgb = h => { h=h.replace('#',''); if(h.length===3) h=h.split('').map(c=>c+c).join(''); const n=parseInt(h,16); return [n>>16&255,n>>8&255,n&255]; };
+
+// ---------- solving ----------
+function circleCenters(p, r){
+  return { L:{x:p.x - r*Math.sin(p.th), y:p.y + r*Math.cos(p.th)}, R:{x:p.x + r*Math.sin(p.th), y:p.y - r*Math.cos(p.th)} };
+}
+function solve(){
+  const {start:s, goal:g, r} = st;
+  const D = Math.hypot(g.x-s.x, g.y-s.y);
+  if (r < 0.005) {
+    st.sol = WORDS.map(w=>({word:w, feasible:false, length:Infinity, straight:true}));
+    const phi = Math.atan2(g.y-s.y, g.x-s.x);
+    st.best = {word:'S', feasible:true, length:D, segs:[{type:'S', len:D}], startTh:phi};
+  } else {
+    st.sol = solveAll(s, g, r);
+    st.best = st.sol.filter(p=>p.feasible).reduce((a,b)=> b.length < a.length ? b : a);
+  }
+  st.D = D;
+}
+function driven(){
+  if (st.follow !== 'auto' && st.r >= 0.005) {
+    const p = st.sol.find(q=>q.word===st.follow);
+    if (p && p.feasible) return p;
+  }
+  return st.best;
+}
+function samplePath(start, segs, r){
+  const pts = [[start.x, start.y]];
+  let x=start.x, y=start.y, th=start.th;
+  for (const sg of segs){
+    if (sg.type === 'S'){ x += sg.len*Math.cos(th); y += sg.len*Math.sin(th); pts.push([x,y]); continue; }
+    const n = Math.max(2, Math.ceil(sg.len/0.04)), sgn = sg.type==='L'?1:-1;
+    const cx = x - sgn*r*Math.sin(th), cy = y + sgn*r*Math.cos(th);
+    const a0 = Math.atan2(y-cy, x-cx);
+    for (let i=1;i<=n;i++){ const a = a0 + sgn*(sg.len/r)*(i/n); pts.push([cx + r*Math.cos(a), cy + r*Math.sin(a)]); }
+    th += sgn*sg.len/r; x = pts[pts.length-1][0]; y = pts[pts.length-1][1];
+  }
+  return pts;
+}
+
+// ---------- view transform ----------
+let W=0, H=0, dpr=1, sc=1;
+const toPx = (x,y) => [(x-VIEW.x0)*sc, (VIEW.y1-y)*sc];
+const toWorld = (px,py) => [px/sc + VIEW.x0, VIEW.y1 - py/sc];
+function resize(){
+  dpr = window.devicePixelRatio || 1;
+  const w = plot.clientWidth; W = w; H = w*2/3; sc = W/(VIEW.x1-VIEW.x0);
+  plot.width = Math.round(W*dpr); plot.height = Math.round(H*dpr);
+  const fw = prof.clientWidth, fh = prof.clientHeight;
+  prof.width = Math.round(fw*dpr); prof.height = Math.round(fh*dpr);
+  request();
+}
+
+// ---------- region map ----------
+let regionCanvas = document.createElement('canvas'), regionKey = '';
+function buildRegions(){
+  const key = [st.start.x,st.start.y,st.start.th,st.goal.th,st.r,C.alpha].join('|');
+  if (key === regionKey) return;
+  regionKey = key;
+  const step = 0.1, nx = Math.round((VIEW.x1-VIEW.x0)/step), ny = Math.round((VIEW.y1-VIEW.y0)/step);
+  regionCanvas.width = nx; regionCanvas.height = ny;
+  const rc = regionCanvas.getContext('2d'), img = rc.createImageData(nx, ny);
+  const cols = WORDS.map(w=>hexRgb(C[w])), a = Math.round(C.alpha*255);
+  const g = {x:0,y:0,th:st.goal.th};
+  for (let j=0;j<ny;j++){
+    g.y = VIEW.y1 - (j+0.5)*step;
+    for (let i=0;i<nx;i++){
+      g.x = VIEW.x0 + (i+0.5)*step;
+      const all = solveAll(st.start, g, st.r);
+      let bi=0, bl=Infinity; for (let k=0;k<6;k++) if (all[k].length < bl){ bl=all[k].length; bi=k; }
+      const o = (j*nx+i)*4, c = cols[bi];
+      img.data[o]=c[0]; img.data[o+1]=c[1]; img.data[o+2]=c[2]; img.data[o+3]=a;
+    }
+  }
+  rc.putImageData(img,0,0);
+}
+
+// ---------- drawing: plot ----------
+function drawGrid(ctx){
+  ctx.fillStyle = C.sheet; ctx.fillRect(0,0,W,H);
+  ctx.lineWidth = 1;
+  for (let x=VIEW.x0; x<=VIEW.x1; x++){
+    ctx.strokeStyle = x%5===0 ? C['grid-major'] : C.grid;
+    const [px] = toPx(x,0); ctx.beginPath(); ctx.moveTo(Math.round(px)+.5,0); ctx.lineTo(Math.round(px)+.5,H); ctx.stroke();
+  }
+  for (let y=VIEW.y0; y<=VIEW.y1; y++){
+    ctx.strokeStyle = y%5===0 ? C['grid-major'] : C.grid;
+    const [,py] = toPx(0,y); ctx.beginPath(); ctx.moveTo(0,Math.round(py)+.5); ctx.lineTo(W,Math.round(py)+.5); ctx.stroke();
+  }
+  ctx.fillStyle = C.muted; ctx.font = `${W<500?9:10.5}px "IBM Plex Mono", ui-monospace, monospace`;
+  ctx.textBaseline = 'bottom'; ctx.textAlign = 'center';
+  for (let x=-10; x<=10; x+=5){ const [px] = toPx(x,0); ctx.fillText(String(x), px, H-3); }
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  for (let y=-5; y<=5; y+=5){ const [,py] = toPx(0,y); ctx.fillText(String(y), 4, py); }
+}
+function strokePts(ctx, pts){
+  ctx.beginPath();
+  pts.forEach(([x,y],i)=>{ const [px,py]=toPx(x,y); i?ctx.lineTo(px,py):ctx.moveTo(px,py); });
+  ctx.stroke();
+}
+function drawCar(ctx, pose, steer, style){
+  const [px,py] = toPx(pose.x,pose.y);
+  ctx.save(); ctx.translate(px,py); ctx.rotate(-pose.th); ctx.scale(sc,-sc);
+  const lw = 1/sc;
+  if (style.beams){
+    ctx.fillStyle = C.beam; ctx.globalAlpha = style.alpha*0.45;
+    for (const s of [1,-1]){ ctx.beginPath(); ctx.moveTo(1.72, .3*s); ctx.lineTo(3.4, .05*s); ctx.lineTo(3.4, .62*s); ctx.closePath(); ctx.fill(); }
+  }
+  ctx.globalAlpha = style.alpha;
+  // wheels
+  ctx.fillStyle = C.ink;
+  const wheel = (x,y,a)=>{ ctx.save(); ctx.translate(x,y); ctx.rotate(a); ctx.fillRect(-.24,-.08,.48,.16); ctx.restore(); };
+  wheel(0,.5,0); wheel(0,-.5,0); wheel(WHEELBASE,.5,steer); wheel(WHEELBASE,-.5,steer);
+  // body
+  ctx.fillStyle = style.fill; ctx.strokeStyle = style.stroke; ctx.lineWidth = 1.5*lw;
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-.35,-.45,2.1,.9,.16) : ctx.rect(-.35,-.45,2.1,.9); ctx.fill(); ctx.stroke();
+  // windshield + axle mark
+  ctx.strokeStyle = style.detail; ctx.lineWidth = 1.2*lw;
+  ctx.beginPath(); ctx.moveTo(1.05,-.33); ctx.quadraticCurveTo(1.2,0,1.05,.33); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,-.3); ctx.lineTo(0,.3); ctx.stroke();
+  ctx.restore();
+}
+function steerFor(type){ return type==='L' ? Math.min(0.6, Math.atan(WHEELBASE/Math.max(st.r,.01))) : type==='R' ? -Math.min(0.6, Math.atan(WHEELBASE/Math.max(st.r,.01))) : 0; }
+function handlePos(p){ return {x:p.x + 3*Math.cos(p.th), y:p.y + 3*Math.sin(p.th)}; }
+function drawHandles(ctx, p, color, key){
+  const h = handlePos(p), [ax,ay] = toPx(p.x,p.y), [hx,hy] = toPx(h.x,h.y);
+  ctx.strokeStyle = color; ctx.lineWidth = 1.25; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(hx,hy); ctx.stroke(); ctx.setLineDash([]);
+  const hot = st.hover===key+'H' || (st.drag && st.drag.key===key+'H');
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(hx,hy, hot?8:6, 0, 7); ctx.fill();
+  ctx.strokeStyle = C.sheet; ctx.lineWidth = 2; ctx.stroke();
+  const hotP = st.hover===key+'P' || (st.drag && st.drag.key===key+'P');
+  ctx.fillStyle = C.sheet; ctx.strokeStyle = color; ctx.lineWidth = hotP?3:2;
+  ctx.beginPath(); ctx.arc(ax,ay, hotP?6.5:5, 0, 7); ctx.fill(); ctx.stroke();
+}
+function drawPlot(){
+  const ctx = pctx; ctx.setTransform(dpr,0,0,dpr,0,0);
+  drawGrid(ctx);
+  const r = st.r;
+  if (st.showRegions && r >= 0.005){
+    buildRegions();
+    ctx.imageSmoothingEnabled = true; ctx.drawImage(regionCanvas, 0, 0, W, H);
+  }
+  if (st.showCircles && r >= 0.005){
+    ctx.strokeStyle = C.circle; ctx.lineWidth = 1; ctx.setLineDash([5,4]);
+    for (const p of [st.start, st.goal]){ const cc = circleCenters(p,r);
+      for (const c of [cc.L, cc.R]){ const [cx,cy]=toPx(c.x,c.y); ctx.beginPath(); ctx.arc(cx,cy,r*sc,0,7); ctx.stroke(); } }
+    ctx.setLineDash([]);
+  }
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  const best = st.best;
+  if (r >= 0.005){
+    for (const p of st.sol){
+      if (!p.feasible || !st.visible[p.word] || p === best) continue;
+      ctx.strokeStyle = C[p.word]; ctx.lineWidth = 1.8; ctx.globalAlpha = .9;
+      strokePts(ctx, samplePath(st.start, p.segs, r));
+    }
+    ctx.globalAlpha = 1;
+    if (st.visible[best.word]){ ctx.strokeStyle = C[best.word]; ctx.lineWidth = 5; strokePts(ctx, samplePath(st.start, best.segs, r)); }
+  } else {
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 4;
+    strokePts(ctx, [[st.start.x,st.start.y],[st.goal.x,st.goal.y]]);
+  }
+  // start & goal ghosts
+  drawCar(ctx, st.start, 0, {fill:hexA(C.start,.18), stroke:C.start, detail:C.start, alpha:1});
+  drawCar(ctx, st.goal, 0, {fill:hexA(C.goal,.18), stroke:C.goal, detail:C.goal, alpha:1});
+  // moving car
+  const dp = driven();
+  const startPose = dp.startTh !== undefined ? {...st.start, th:dp.startTh} : st.start;
+  const pose = poseAt(startPose, dp.segs, Math.max(r,1e-9), st.progress*dp.length);
+  drawCar(ctx, pose, steerFor(pose.seg), {fill:C.car, stroke:C.ink, detail:C.sheet, alpha:1, beams:true});
+  drawHandles(ctx, st.start, C.start, 's');
+  drawHandles(ctx, st.goal, C.goal, 'g');
+}
+function hexA(h,a){ const [r,g,b]=hexRgb(h); return `rgba(${r},${g},${b},${a})`; }
+
+// ---------- drawing: profile ----------
+function drawProfile(){
+  const ctx = fctx, w = prof.clientWidth, h = prof.clientHeight;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.fillStyle = C.sheet; ctx.fillRect(0,0,w,h);
+  const dp = driven(), L = dp.length, r = st.r;
+  const padL = 58, padR = 12, lane1 = [10, 74], lane2 = [104, h-26];
+  const xs = s => padL + (L>0 ? s/L : 0)*(w-padL-padR);
+  ctx.font = '11px "IBM Plex Mono", ui-monospace, monospace'; ctx.textBaseline='middle';
+  // lane 1: u(s)
+  const uMax = r>=0.005 ? 1/r : 1;
+  const yU = u => lane1[0] + (1 - (u/uMax+1)/2)*(lane1[1]-lane1[0]);
+  ctx.strokeStyle = C.grid; ctx.lineWidth = 1; ctx.fillStyle = C.muted; ctx.textAlign='right';
+  for (const [u,lab] of [[uMax, r>=0.005?'+1/r':'—'],[0,'0'],[-uMax, r>=0.005?'−1/r':'—']]){
+    const y = Math.round(yU(u))+.5; ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w-padR,y); ctx.stroke(); ctx.fillText(lab, padL-8, y);
+  }
+  ctx.save(); ctx.translate(12,(lane1[0]+lane1[1])/2); ctx.rotate(-Math.PI/2); ctx.textAlign='center'; ctx.fillText('u',0,0); ctx.restore();
+  const col = dp.word==='S' ? C.ink : C[dp.word];
+  ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.beginPath();
+  let s0 = 0, first = true;
+  for (const sg of dp.segs){
+    const u = r>=0.005 ? (sg.type==='L'?uMax:sg.type==='R'?-uMax:0) : 0;
+    const x0 = xs(s0), x1 = xs(s0+sg.len), y = yU(u);
+    first ? ctx.moveTo(x0,y) : ctx.lineTo(x0,y); ctx.lineTo(x1,y); first=false;
+    s0 += sg.len;
+  }
+  ctx.stroke();
+  // segment letters
+  s0 = 0; ctx.textAlign='center'; ctx.font = '600 12px "Barlow Semi Condensed", system-ui, sans-serif';
+  for (const sg of dp.segs){
+    if (sg.len > 1e-6 && xs(s0+sg.len)-xs(s0) > 26){
+      const u = r>=0.005 ? (sg.type==='L'?uMax:sg.type==='R'?-uMax:0) : 0;
+      ctx.fillStyle = C.ink; ctx.fillText(`${sg.type} ${sg.len.toFixed(2)}`, (xs(s0)+xs(s0+sg.len))/2, u>0 ? yU(u)+11 : yU(u)-10);
+    }
+    if (s0>0){ ctx.strokeStyle=C.rule; ctx.setLineDash([2,3]); ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(Math.round(xs(s0))+.5,lane1[0]); ctx.lineTo(Math.round(xs(s0))+.5,lane2[1]); ctx.stroke(); ctx.setLineDash([]); }
+    s0 += sg.len;
+  }
+  // lane 2: θ(s) degrees, unwrapped
+  const N = 160, th = [];
+  const startPose = dp.startTh !== undefined ? {...st.start, th:dp.startTh} : st.start;
+  for (let i=0;i<=N;i++) th.push(poseAt(startPose, dp.segs, Math.max(r,1e-9), L*i/N).th*DEG);
+  let tMin = Math.min(...th), tMax = Math.max(...th);
+  const stepDeg = [45,90,180,360,720].find(sd => (tMax-tMin)/sd <= 3.2) || 720;
+  tMin = Math.floor(tMin/stepDeg)*stepDeg; tMax = Math.ceil(tMax/stepDeg)*stepDeg; if (tMax===tMin){ tMax+=stepDeg; tMin-=stepDeg; }
+  const yT = t => lane2[1] - (t-tMin)/(tMax-tMin)*(lane2[1]-lane2[0]);
+  ctx.font = '11px "IBM Plex Mono", ui-monospace, monospace'; ctx.textAlign='right'; ctx.lineWidth=1;
+  const skip = Math.ceil(((tMax-tMin)/stepDeg+1)/5);
+  let k=0;
+  for (let t=tMin; t<=tMax+1e-9; t+=stepDeg, k++){
+    const y = Math.round(yT(t))+.5; ctx.strokeStyle=C.grid; ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w-padR,y); ctx.stroke();
+    if (k%skip===0){ ctx.fillStyle=C.muted; ctx.fillText(`${Math.round(t)}°`, padL-8, y); }
+  }
+  ctx.save(); ctx.translate(12,(lane2[0]+lane2[1])/2); ctx.rotate(-Math.PI/2); ctx.textAlign='center'; ctx.fillStyle=C.muted; ctx.fillText('θ',0,0); ctx.restore();
+  ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath();
+  th.forEach((t,i)=>{ const x = xs(L*i/N), y = yT(t); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.stroke();
+  // x axis
+  ctx.fillStyle = C.muted; ctx.textAlign='center'; ctx.textBaseline='top';
+  const niceStep = L>40?10:L>16?5:L>6?2:L>2.5?1:0.5;
+  for (let s=0; s<=L+1e-9; s+=niceStep){ ctx.fillText(niceStep<1?s.toFixed(1):String(Math.round(s)), xs(s), lane2[1]+8); }
+  ctx.textAlign='right'; ctx.fillText('s', w-padR, lane2[1]+8);
+  // progress cursor
+  const xp = Math.round(xs(st.progress*L))+.5;
+  ctx.strokeStyle = C.car; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(xp,lane1[0]); ctx.lineTo(xp,lane2[1]); ctx.stroke();
+  const ip = Math.round(st.progress*N); ctx.fillStyle=C.car; ctx.beginPath(); ctx.arc(xp, yT(th[ip]), 4, 0, 7); ctx.fill();
+}
+
+// ---------- UI sync ----------
+const fmt = v => Number.isFinite(v) ? v.toFixed(2) : '–';
+function buildTable(){
+  const tb = $('tbody'); tb.innerHTML = '';
+  for (const w of WORDS){
+    const tr = document.createElement('tr'); tr.id = 'row-'+w;
+    tr.innerHTML = `<td><input type="checkbox" id="vis-${w}" aria-label="Show ${w}" checked></td>
+      <td class="w"><span class="sw" style="background:var(--${w})"></span>${w}</td>
+      <td class="num" id="len-${w}">–</td><td class="note" id="note-${w}"></td>`;
+    tb.appendChild(tr);
+    tr.querySelector('input').addEventListener('change', e=>{ st.visible[w]=e.target.checked; request(); });
+  }
+}
+function conditionNote(w){
+  const r = st.r;
+  if (r < 0.005) return 'r = 0: the straight line is optimal';
+  const cs = circleCenters(st.start, r), cg = circleCenters(st.goal, r);
+  const dist = (a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+  if (w==='LSL'||w==='RSR') return 'always exists';
+  if (w==='LSR'){ const d=dist(cs.L,cg.R); return `centers ${d.toFixed(2)} ${d>2*r?'>':'≤'} 2r = ${(2*r).toFixed(2)}`; }
+  if (w==='RSL'){ const d=dist(cs.R,cg.L); return `centers ${d.toFixed(2)} ${d>2*r?'>':'≤'} 2r = ${(2*r).toFixed(2)}`; }
+  if (w==='LRL'){ const d=dist(cs.L,cg.L); return `centers ${d.toFixed(2)} ${d<4*r?'<':'≥'} 4r = ${(4*r).toFixed(2)}`; }
+  if (w==='RLR'){ const d=dist(cs.R,cg.R); return `centers ${d.toFixed(2)} ${d<4*r?'<':'≥'} 4r = ${(4*r).toFixed(2)}`; }
+}
+function syncUI(){
+  const b = st.best;
+  const bw = $('bestWord'); bw.textContent = b.word; bw.style.color = b.word==='S' ? 'var(--ink)' : `var(--${b.word})`;
+  $('bestLen').textContent = fmt(b.length);
+  $('dist').textContent = fmt(st.D);
+  $('ratio').textContent = st.D>1e-9 ? (b.length/st.D).toFixed(3) : '–';
+  const dp = driven();
+  $('followPill').hidden = dp === b; $('followPill').textContent = `car on ${dp.word}`;
+  $('profileTitle').textContent = `Control input along ${dp.word}${dp===b?' (shortest)':''}`;
+  for (const p of st.sol){
+    $('len-'+p.word).textContent = p.feasible ? fmt(p.length) : '—';
+    $('note-'+p.word).textContent = conditionNote(p.word);
+    const tr = $('row-'+p.word); tr.classList.toggle('best', p===b); tr.classList.toggle('off', !p.feasible);
+  }
+  $('progressVal').textContent = st.progress.toFixed(2);
+  $('rminVal').textContent = st.r < 0.005 ? '0 (straight line)' : st.r.toFixed(2);
+  const setIf = (id, v) => { const el=$(id); if (document.activeElement!==el) el.value = v; };
+  setIf('progress', st.progress); setIf('rmin', st.r);
+  setIf('sx', st.start.x.toFixed(2)); setIf('sy', st.start.y.toFixed(2)); setIf('sth', Math.round(st.start.th*DEG));
+  setIf('gx', st.goal.x.toFixed(2)); setIf('gy', st.goal.y.toFixed(2)); setIf('gth', Math.round(st.goal.th*DEG));
+}
+let pending = false;
+function request(){ if (pending) return; pending = true; requestAnimationFrame(()=>{ pending=false; solve(); syncUI(); drawPlot(); drawProfile(); }); }
+
+// ---------- pointer ----------
+function hitTest(px,py){
+  const cands = [];
+  for (const [key,p] of [['g',st.goal],['s',st.start]]){
+    const h = handlePos(p);
+    cands.push([key+'H', toPx(h.x,h.y), 16]);
+    cands.push([key+'P', toPx(p.x,p.y), 14]);
+  }
+  for (const [k,[x,y],rad] of cands) if (Math.hypot(px-x,py-y) <= rad) return k;
+  // car bodies
+  for (const [key,p] of [['g',st.goal],['s',st.start]]){
+    const [wx,wy] = toWorld(px,py), dx=wx-p.x, dy=wy-p.y;
+    const lx = dx*Math.cos(p.th)+dy*Math.sin(p.th), ly = -dx*Math.sin(p.th)+dy*Math.cos(p.th);
+    if (lx>-.5 && lx<1.9 && Math.abs(ly)<.6) return key+'P';
+  }
+  return null;
+}
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+function evPos(e){ const r = plot.getBoundingClientRect(); return [e.clientX-r.left, e.clientY-r.top]; }
+plot.addEventListener('pointerdown', e=>{
+  const [px,py] = evPos(e), k = hitTest(px,py); if (!k) return;
+  const p = k[0]==='g'?st.goal:st.start, [wx,wy] = toWorld(px,py);
+  st.drag = {key:k, ox:p.x-wx, oy:p.y-wy}; plot.setPointerCapture(e.pointerId); e.preventDefault(); request();
+});
+plot.addEventListener('pointermove', e=>{
+  const [px,py] = evPos(e);
+  if (!st.drag){ const k = hitTest(px,py); if (k!==st.hover){ st.hover=k; plot.style.cursor = k ? (k[1]==='H'?'crosshair':'grab') : 'default'; request(); } return; }
+  const [wx,wy] = toWorld(px,py), k = st.drag.key, p = k[0]==='g'?st.goal:st.start;
+  if (k[1]==='P'){ p.x = clamp(wx+st.drag.ox,-LIMIT.x,LIMIT.x); p.y = clamp(wy+st.drag.oy,-LIMIT.y,LIMIT.y); plot.style.cursor='grabbing'; }
+  else { p.th = Math.atan2(wy-p.y, wx-p.x); }
+  request();
+});
+const endDrag = ()=>{ if (st.drag){ st.drag=null; plot.style.cursor = st.hover ? 'grab':'default'; request(); } };
+plot.addEventListener('pointerup', endDrag); plot.addEventListener('pointercancel', endDrag);
+plot.addEventListener('pointerleave', ()=>{ if(!st.drag && st.hover){ st.hover=null; request(); } });
+
+// ---------- controls ----------
+$('progress').addEventListener('input', e=>{ st.progress = +e.target.value; request(); });
+$('rmin').addEventListener('input', e=>{ st.r = +e.target.value; request(); });
+$('speed').addEventListener('change', e=>{ st.speed = +e.target.value; });
+$('follow').addEventListener('change', e=>{ st.follow = e.target.value; request(); });
+$('showCircles').addEventListener('change', e=>{ st.showCircles = e.target.checked; request(); });
+$('showRegions').addEventListener('change', e=>{ st.showRegions = e.target.checked; request(); });
+const bindNum = (id, fn) => $(id).addEventListener('input', e=>{ const v = parseFloat(e.target.value); if (Number.isFinite(v)){ fn(v); request(); } });
+bindNum('sx', v=>st.start.x=clamp(v,-LIMIT.x,LIMIT.x)); bindNum('sy', v=>st.start.y=clamp(v,-LIMIT.y,LIMIT.y)); bindNum('sth', v=>st.start.th=v/DEG);
+bindNum('gx', v=>st.goal.x=clamp(v,-LIMIT.x,LIMIT.x)); bindNum('gy', v=>st.goal.y=clamp(v,-LIMIT.y,LIMIT.y)); bindNum('gth', v=>st.goal.th=v/DEG);
+$('reset').addEventListener('click', ()=>{ st.start={...DEFAULTS.start}; st.goal={...DEFAULTS.goal}; st.r=DEFAULTS.r; st.progress=DEFAULTS.progress; request(); });
+$('random').addEventListener('click', ()=>{ st.goal = {x:(Math.random()*2-1)*12, y:(Math.random()*2-1)*8, th:(Math.random()*2-1)*Math.PI}; st.progress=0; request(); });
+
+let last = 0;
+function tick(t){
+  if (!st.playing) return;
+  const dt = last ? Math.min(0.05,(t-last)/1000) : 0; last = t;
+  const L = driven().length || 1;
+  st.progress += dt*st.speed/L;
+  if (st.progress >= 1) st.progress = 0;
+  request(); requestAnimationFrame(tick);
+}
+$('play').addEventListener('click', ()=>{
+  st.playing = !st.playing; $('play').textContent = st.playing ? 'Pause' : 'Play';
+  if (st.playing){ last = 0; if (st.progress >= 0.999) st.progress = 0; requestAnimationFrame(tick); }
+});
+
+// ---------- boot ----------
+buildTable(); readTokens();
+new ResizeObserver(resize).observe(plot);
+new ResizeObserver(resize).observe(prof);
+const reTheme = ()=>{ readTokens(); request(); };
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', reTheme);
+new MutationObserver(reTheme).observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
+if (document.fonts) document.fonts.ready.then(request);
+resize();
+})();
+</script>
